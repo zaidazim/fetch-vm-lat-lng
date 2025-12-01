@@ -22,9 +22,28 @@ export default function Home() {
 
     for (let i = 0; i < total; i++) {
       const row = processedData[i];
-      // Assuming the address column is named 'Address' or 'address'
-      // You might want to make this selectable or smarter
-      const address = row.Address || row.address || Object.values(row)[0]; // Fallback to first column
+
+      // Smart Address Construction
+      let address = '';
+
+      // Check for specific columns (case-insensitive)
+      const getCol = (name: string) => {
+        const key = Object.keys(row).find(k => k.toLowerCase() === name.toLowerCase());
+        return key ? row[key] : '';
+      };
+
+      const addrPart = getCol('address') || getCol('street');
+      const cityPart = getCol('city');
+      const statePart = getCol('state');
+      const zipPart = getCol('zip') || getCol('postal code');
+
+      if (addrPart || cityPart || statePart) {
+        // Construct from parts
+        address = [addrPart, cityPart, statePart, zipPart].filter(Boolean).join(', ');
+      } else {
+        // Fallback: Use the first column
+        address = Object.values(row)[0] as string;
+      }
 
       if (address) {
         try {
