@@ -37,7 +37,8 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                     <p className="text-xs text-gray-500 mb-2">CSV files only</p>
                     <div className="text-xs text-gray-400 bg-gray-50 p-2 rounded text-center">
                         <p className="font-medium">Format:</p>
-                        <p>Columns: <code className="bg-gray-200 px-1 rounded">Address</code>, <code className="bg-gray-200 px-1 rounded">City</code>, <code className="bg-gray-200 px-1 rounded">State</code></p>
+                        <p>Columns: <code className="bg-gray-200 px-1 rounded">Address</code>, <code className="bg-gray-200 px-1 rounded">City</code>, <code className="bg-gray-200 px-1 rounded">State</code>, <code className="bg-gray-200 px-1 rounded">Zip</code></p>
+                        <p className="text-[10px] mt-1">(Zip/State are optional)</p>
                         <p>or first column will be used</p>
                     </div>
                 </div>
