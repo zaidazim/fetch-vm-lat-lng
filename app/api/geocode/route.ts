@@ -12,18 +12,22 @@ export async function POST(request: Request) {
     }
 
     const encodedAddress = encodeURIComponent(address);
-    // Nominatim API endpoint
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodedAddress}&format=json&limit=1`;
+    const apiKey = process.env.LOCATIONIQ_API_KEY;
+    if (!apiKey) {
+      console.error('LOCATIONIQ_API_KEY is missing');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
 
-    const response = await fetch(url, {
-      headers: {
-        // Nominatim requires a User-Agent identifying the application
-        'User-Agent': 'VM-Address-Geocoder/1.0 (internal-tool)',
-      },
-    });
+    // LocationIQ API endpoint
+    const url = `https://us1.locationiq.com/v1/search?key=${apiKey}&q=${encodedAddress}&format=json&limit=1`;
+
+    const response = await fetch(url);
 
     if (!response.ok) {
-      throw new Error(`Nominatim API error: ${response.statusText}`);
+      throw new Error(`LocationIQ API error: ${response.statusText}`);
     }
 
     const data = await response.json();
