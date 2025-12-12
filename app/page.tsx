@@ -52,12 +52,34 @@ export default function Home() {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
 
-          const response = await fetch('/api/geocode', {
+          let response = await fetch('/api/geocode', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address }),
           });
-          const result = await response.json();
+          let result = await response.json();
+
+          // Retry logic: If 404 and we have city/state, try broader address
+          if (!response.ok && (cityPart || statePart)) {
+            const fallbackAddress = [cityPart, statePart, zipPart].filter(Boolean).join(', ');
+            if (fallbackAddress && fallbackAddress !== address) {
+              // Wait a bit before retry to be nice to API
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              const retryResponse = await fetch('/api/geocode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: fallbackAddress }),
+              });
+
+              if (retryResponse.ok) {
+                response = retryResponse;
+                result = await retryResponse.json();
+                // Append warning to status
+                result.isFallback = true;
+              }
+            }
+          }
 
           if (response.ok) {
             processedData[i] = {
@@ -65,7 +87,7 @@ export default function Home() {
               Latitude: result.latitude,
               Longitude: result.longitude,
               'Matched Place': result.placeName,
-              Status: 'Success',
+              Status: result.isFallback ? 'Success (Approximate)' : 'Success',
             };
           } else {
             processedData[i] = {

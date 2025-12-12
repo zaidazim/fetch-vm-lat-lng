@@ -24,9 +24,19 @@ export async function POST(request: Request) {
     // LocationIQ API endpoint
     const url = `https://us1.locationiq.com/v1/search?key=${apiKey}&q=${encodedAddress}&format=json&limit=1`;
 
+    console.log(`Geocoding request for: "${address}"`);
+
     const response = await fetch(url);
+    console.log(`LocationIQ response status: ${response.status}`);
 
     if (!response.ok) {
+      if (response.status === 404) {
+        console.log('LocationIQ matched no results');
+        return NextResponse.json(
+          { error: 'No results found' },
+          { status: 404 }
+        );
+      }
       throw new Error(`LocationIQ API error: ${response.statusText}`);
     }
 
@@ -40,6 +50,7 @@ export async function POST(request: Request) {
         placeName: result.display_name,
       });
     } else {
+      console.log('LocationIQ returned empty array');
       return NextResponse.json(
         { error: 'No results found' },
         { status: 404 }
