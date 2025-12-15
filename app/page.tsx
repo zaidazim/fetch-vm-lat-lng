@@ -32,14 +32,16 @@ export default function Home() {
         return key ? row[key] : '';
       };
 
+      const vmName = getCol('name') || getCol('vm name') || getCol('vmname');
       const addrPart = getCol('address') || getCol('street');
       const cityPart = getCol('city');
       const statePart = getCol('state');
       const zipPart = getCol('zip') || getCol('postal code');
 
-      if (addrPart || cityPart || statePart) {
+      if (addrPart || cityPart || statePart || vmName) {
         // Construct from parts
-        address = [addrPart, cityPart, statePart, zipPart].filter(Boolean).join(', ');
+        // Priorities: VM Name > Address > City > State > Zip
+        address = [vmName, addrPart, cityPart, statePart, zipPart].filter(Boolean).join(', ');
       } else {
         // Fallback: Use the first column
         address = Object.values(row)[0] as string;
@@ -47,55 +49,78 @@ export default function Home() {
 
       if (address) {
         try {
-          // Rate Limiting: Wait 1 second before each request (except the first one)
-          if (i > 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
+          // Retry logic for 429 (Rate Limits)
+          const maxRetries = 3;
+          let retryCount = 0;
+          let success = false;
+          let finalResult = null;
 
-          let response = await fetch('/api/geocode', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address }),
-          });
-          let result = await response.json();
-
-          // Retry logic: If 404 and we have city/state, try broader address
-          if (!response.ok && (cityPart || statePart)) {
-            const fallbackAddress = [cityPart, statePart, zipPart].filter(Boolean).join(', ');
-            if (fallbackAddress && fallbackAddress !== address) {
-              // Wait a bit before retry to be nice to API
+          while (retryCount <= maxRetries && !success) {
+            if (retryCount > 0) {
+              // Exponential backoff or default
+              const delay = 2000 * Math.pow(2, retryCount - 1);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            } else if (i > 0) {
+              // Standard pacing
               await new Promise(resolve => setTimeout(resolve, 1000));
-
-              const retryResponse = await fetch('/api/geocode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: fallbackAddress }),
-              });
-
-              if (retryResponse.ok) {
-                response = retryResponse;
-                result = await retryResponse.json();
-                // Append warning to status
-                result.isFallback = true;
-              }
             }
+
+            const payload = {
+              address, // Use the combined string as primary 'address'
+              vmName,
+              street: addrPart,
+              city: cityPart,
+              state: statePart,
+              postal: zipPart
+            };
+
+            const response = await fetch('/api/geocode', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+
+            const result = await response.json();
+
+            if (response.status === 429) {
+              const retryAfter = response.headers.get('Retry-After');
+              if (retryAfter) {
+                const waitSeconds = parseInt(retryAfter, 10);
+                if (!isNaN(waitSeconds)) {
+                  await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+                  // Don't increment retryCount if we waited explicitly? Or do? 
+                  // Let's just continue loop.
+                  continue;
+                }
+              }
+              retryCount++;
+              continue;
+            }
+
+            finalResult = result;
+            success = response.ok;
+            // If not OK (e.g. 404, 500), we don't retry locally anymore, we accept the result
+            // because the backend now tries multiple strategies.
+            break;
           }
 
-          if (response.ok) {
+          if (success && finalResult) {
             processedData[i] = {
               ...row,
-              Latitude: result.latitude,
-              Longitude: result.longitude,
-              'Matched Place': result.placeName,
-              Status: result.isFallback ? 'Success (Approximate)' : 'Success',
+              Latitude: finalResult.latitude,
+              Longitude: finalResult.longitude,
+              'Matched Place': finalResult.placeName,
+              Status: finalResult.status || 'Success',
+              Confidence: finalResult.confidence // Optional display
             };
           } else {
             processedData[i] = {
               ...row,
-              Status: `Error: ${result.error}`,
+              Status: finalResult?.status || `Error: ${finalResult?.error || 'Unknown error'}`,
             };
           }
         } catch (error) {
+          console.error(error);
           processedData[i] = {
             ...row,
             Status: 'Error: Network/Server',
